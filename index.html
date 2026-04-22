@@ -2,664 +2,575 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>TV Chile 🇨🇱</title>
-
-<!-- HLS.js para reproducir streams m3u8 en el navegador -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<title>TV Chile</title>
+<!-- HLS.js versión estable compatible con navegadores TV -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=Barlow:wght@300;400;600&display=swap');
+/* ── RESET & BASE ── compatible con Samsung Tizen antiguo ───── */
+* { -webkit-box-sizing:border-box; box-sizing:border-box; margin:0; padding:0; }
 
-  :root {
-    --bg:        #07090F;
-    --bg2:       #0C0F1A;
-    --sidebar-w: 310px;
-    --topbar-h:  54px;
-    --accent:    #1E90FF;
-  }
+html, body {
+  width:100%; height:100%;
+  background:#000;
+  color:#fff;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  overflow:hidden;
+  cursor:none;
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── VIDEO FULL SCREEN ──────────────────────────────────────── */
+#player {
+  position:fixed;
+  top:0; left:0; right:0; bottom:0;
+  width:100%; height:100%;
+  background:#000;
+  display:block;
+  z-index:1;
+}
 
-  html, body {
-    width: 100%; height: 100%;
-    background: var(--bg);
-    color: #fff;
-    font-family: 'Barlow', sans-serif;
-    overflow: hidden;
-    cursor: none; /* TV: sin cursor */
-  }
+/* ── LOADING ────────────────────────────────────────────────── */
+#loading {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:#040608;
+  display:-webkit-box; display:-webkit-flex; display:flex;
+  -webkit-box-orient:vertical; -webkit-flex-direction:column; flex-direction:column;
+  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
+  -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center;
+  z-index:50;
+  gap:18px;
+}
+#loading.hide { display:none; }
 
-  /* ── TOPBAR ─────────────────────────────────────────────── */
-  #topbar {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: var(--topbar-h);
-    display: flex; align-items: center;
-    justify-content: space-between;
-    padding: 0 24px;
-    background: linear-gradient(180deg, rgba(0,0,0,.92) 0%, transparent 100%);
-    z-index: 100;
-    pointer-events: none;
-  }
-  #logo {
-    background: linear-gradient(120deg, #002060, #1E90FF);
-    border-radius: 8px;
-    padding: 5px 16px;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 900; font-size: 18px; letter-spacing: 3px;
-  }
-  #topbar-right { text-align: right; }
-  #clock {
-    font-family: 'Barlow Condensed', monospace;
-    font-weight: 700; font-size: 24px; letter-spacing: 3px; line-height: 1;
-  }
-  #date-label { font-size: 11px; color: rgba(255,255,255,.35); text-transform: capitalize; }
+#spinner {
+  width:56px; height:56px; border-radius:50%;
+  border:3px solid rgba(255,255,255,.12);
+  border-top-color:#1E90FF;
+  -webkit-animation:spin .7s linear infinite;
+  animation:spin .7s linear infinite;
+}
+#loading-ch {
+  font-size:18px; font-weight:700; letter-spacing:4px;
+  color:#1E90FF; text-transform:uppercase;
+}
 
-  /* ── LAYOUT ─────────────────────────────────────────────── */
-  #app {
-    display: flex;
-    width: 100%; height: 100%;
-    padding-top: var(--topbar-h);
-  }
+/* ── ERROR ──────────────────────────────────────────────────── */
+#error-box {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:#040608;
+  display:none;
+  -webkit-box-orient:vertical; -webkit-flex-direction:column; flex-direction:column;
+  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
+  -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center;
+  z-index:50; gap:14px;
+  text-align:center;
+}
+#error-box.show {
+  display:-webkit-box; display:-webkit-flex; display:flex;
+}
+#error-msg { font-size:15px; color:rgba(255,255,255,.5); line-height:1.6; }
+#retry-btn {
+  margin-top:10px; padding:11px 30px;
+  background:#1E90FF; border:none; border-radius:8px;
+  color:#fff; font-size:15px; font-weight:700;
+  letter-spacing:2px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
 
-  /* ── SIDEBAR ────────────────────────────────────────────── */
-  #sidebar {
-    width: var(--sidebar-w);
-    min-width: var(--sidebar-w);
-    height: 100%;
-    background: rgba(8,10,20,.97);
-    border-right: 1px solid rgba(255,255,255,.07);
-    display: flex; flex-direction: column;
-    transition: width .3s ease, min-width .3s ease, opacity .3s ease;
-    overflow: hidden;
-  }
-  #sidebar.hidden { width: 0; min-width: 0; opacity: 0; }
+/* ── BADGE "AHORA VIENDO" (siempre visible, esquina inf-izq) ─ */
+#now-badge {
+  position:fixed; bottom:24px; left:24px;
+  z-index:30;
+  -webkit-transition:opacity .4s; transition:opacity .4s;
+}
+#now-badge-inner {
+  display:-webkit-box; display:-webkit-flex; display:flex;
+  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
+  gap:10px;
+  padding:8px 14px 8px 10px;
+  background:rgba(0,0,0,.72);
+  border-left:3px solid #1E90FF;
+  border-radius:0 6px 6px 0;
+  -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+}
+.live-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:#1E90FF;
+  -webkit-animation:pulse 1.4s ease-in-out infinite;
+  animation:pulse 1.4s ease-in-out infinite;
+  -webkit-box-shadow:0 0 6px #1E90FF; box-shadow:0 0 6px #1E90FF;
+  -webkit-flex-shrink:0; flex-shrink:0;
+}
+#badge-num {
+  font-size:11px; font-weight:700; letter-spacing:2px;
+  color:rgba(255,255,255,.4); font-family:monospace;
+}
+#badge-name {
+  font-size:17px; font-weight:700;
+  color:#fff; letter-spacing:.5px;
+}
+#badge-live {
+  font-size:9px; font-weight:700; letter-spacing:2px;
+  color:#1E90FF; font-family:monospace;
+}
 
-  #sidebar-header {
-    padding: 16px 20px 12px;
-    border-bottom: 1px solid rgba(255,255,255,.06);
-    flex-shrink: 0;
-  }
-  #sidebar-header .label {
-    font-size: 9px; letter-spacing: 3.5px; font-weight: 700;
-    color: rgba(255,255,255,.25); margin-bottom: 4px;
-  }
-  #sidebar-header .title {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 22px; font-weight: 900; color: #fff;
-  }
+/* ── CANAL OVERLAY (aparece al navegar) ─────────────────────── */
+#ch-overlay {
+  position:fixed; bottom:0; left:0; right:0;
+  z-index:40;
+  background:-webkit-linear-gradient(top, transparent, rgba(0,0,0,.95));
+  background:linear-gradient(to bottom, transparent, rgba(0,0,0,.95));
+  padding:60px 0 0;
+  -webkit-transform:translateY(100%); transform:translateY(100%);
+  -webkit-transition:-webkit-transform .35s ease; transition:transform .35s ease;
+}
+#ch-overlay.visible {
+  -webkit-transform:translateY(0); transform:translateY(0);
+}
 
-  #channel-list {
-    flex: 1; overflow-y: auto; overflow-x: hidden;
-    padding: 6px 0;
-    scroll-behavior: smooth;
-  }
-  #channel-list::-webkit-scrollbar { width: 0; }
+/* Scrollable channel strip */
+#ch-strip {
+  display:-webkit-box; display:-webkit-flex; display:flex;
+  -webkit-box-align:end; -webkit-align-items:flex-end; align-items:flex-end;
+  gap:0;
+  overflow:hidden;
+  padding:0 0 28px;
+}
 
-  .ch-item {
-    display: flex; align-items: center; gap: 13px;
-    padding: 11px 18px;
-    cursor: pointer;
-    border-left: 3px solid transparent;
-    transition: background .15s, border-color .15s;
-    user-select: none;
-    white-space: nowrap;
-  }
-  .ch-item:hover, .ch-item.focused {
-    background: linear-gradient(90deg, var(--item-accent, #1E90FF)15, transparent);
-    border-left-color: var(--item-accent, #1E90FF);
-  }
-  .ch-item.active {
-    border-left-color: var(--item-accent, #1E90FF);
-  }
+.ch-card {
+  -webkit-flex-shrink:0; flex-shrink:0;
+  width:180px;
+  padding:14px 16px 16px;
+  -webkit-transition:all .22s ease; transition:all .22s ease;
+  opacity:.45;
+  -webkit-transform:scale(.88); transform:scale(.88);
+  -webkit-transform-origin:bottom center; transform-origin:bottom center;
+  cursor:pointer;
+  position:relative;
+}
+.ch-card.focused {
+  opacity:1;
+  -webkit-transform:scale(1.05); transform:scale(1.05);
+}
+.ch-card.active-ch .ch-card-num { /* active marker */ }
 
-  .ch-icon {
-    width: 50px; height: 50px; border-radius: 10px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 900; font-family: monospace;
-    line-height: 1.2; text-align: center;
-    border: 1.5px solid rgba(255,255,255,.07);
-    background: rgba(255,255,255,.04);
-    transition: all .2s;
-  }
-  .ch-item.active .ch-icon, .ch-item.focused .ch-icon {
-    border-color: var(--item-accent, #1E90FF);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--item-accent, #1E90FF) 35%, transparent);
-    color: var(--item-accent, #1E90FF) !important;
-  }
+.ch-card-top {
+  display:-webkit-box; display:-webkit-flex; display:flex;
+  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
+  gap:8px; margin-bottom:8px;
+}
+.ch-card-num {
+  font-size:10px; font-family:monospace; font-weight:700;
+  letter-spacing:2px; color:rgba(255,255,255,.4);
+}
+.ch-card-cat {
+  font-size:8px; letter-spacing:1.5px; font-weight:700;
+  color:rgba(255,255,255,.3);
+}
+.ch-card-name {
+  font-size:24px; font-weight:700;
+  line-height:1; color:rgba(255,255,255,.6);
+  -webkit-transition:color .2s; transition:color .2s;
+  letter-spacing:.5px;
+}
+.ch-card.focused .ch-card-name { color:#fff; }
+.ch-card-sub {
+  font-size:11px; color:rgba(255,255,255,.3);
+  margin-top:3px;
+}
+/* Accent line at bottom of focused card */
+.ch-card-line {
+  position:absolute; bottom:0; left:16px; right:16px;
+  height:2px; border-radius:2px;
+  background:transparent;
+  -webkit-transition:background .2s; transition:background .2s;
+}
+.ch-card.focused .ch-card-line { background:#1E90FF; }
 
-  .ch-info { flex: 1; min-width: 0; }
-  .ch-badge {
-    font-size: 9px; letter-spacing: 1.5px; font-weight: 700;
-    color: rgba(255,255,255,.25); font-family: monospace;
-    margin-bottom: 2px;
-  }
-  .ch-item.active .ch-badge { color: var(--item-accent, #1E90FF); }
-  .ch-name {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 20px; font-weight: 900; line-height: 1;
-    color: rgba(255,255,255,.55);
-    overflow: hidden; text-overflow: ellipsis;
-    transition: color .15s;
-  }
-  .ch-item.active .ch-name,
-  .ch-item.focused .ch-name { color: #fff; }
-  .ch-sub { font-size: 11px; color: rgba(255,255,255,.28); margin-top: 1px; }
+/* ── LOGO TV (siempre visible esquina sup-izq) ──────────────── */
+#tv-logo {
+  position:fixed; top:20px; left:22px;
+  z-index:30;
+  background:-webkit-linear-gradient(left, #002060, #1E90FF);
+  background:linear-gradient(to right, #002060, #1E90FF);
+  border-radius:7px; padding:5px 15px;
+  font-size:15px; font-weight:700; letter-spacing:3px;
+  pointer-events:none;
+}
 
-  .ch-play-arrow {
-    font-size: 14px; color: var(--item-accent, #1E90FF);
-    opacity: 0; transition: opacity .15s;
-  }
-  .ch-item.focused .ch-play-arrow { opacity: 1; }
+/* Reloj esquina sup-der */
+#clock-box {
+  position:fixed; top:16px; right:22px;
+  z-index:30; text-align:right;
+  pointer-events:none;
+}
+#clock-time {
+  font-size:22px; font-weight:700; letter-spacing:3px;
+  font-family:monospace; line-height:1;
+}
+#clock-date { font-size:10px; color:rgba(255,255,255,.35); }
 
-  #sidebar-hint {
-    padding: 12px 18px;
-    border-top: 1px solid rgba(255,255,255,.05);
-    background: rgba(0,0,0,.25);
-    font-size: 10px; color: rgba(255,255,255,.2);
-    line-height: 1.9; font-family: monospace; flex-shrink: 0;
-  }
-
-  /* ── VIDEO AREA ─────────────────────────────────────────── */
-  #video-area {
-    flex: 1; position: relative; background: #000;
-    min-width: 0;
-  }
-
-  #player {
-    width: 100%; height: 100%;
-    display: block; object-fit: contain;
-    background: #000;
-  }
-
-  /* ── OVERLAYS ───────────────────────────────────────────── */
-  #loading-overlay {
-    position: absolute; inset: 0;
-    background: #040608;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 16px; z-index: 10;
-    transition: opacity .3s;
-  }
-  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
-
-  .spinner {
-    width: 52px; height: 52px; border-radius: 50%;
-    border: 3px solid rgba(255,255,255,.1);
-    border-top-color: var(--accent);
-    animation: spin .7s linear infinite;
-  }
-  #loading-text {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 18px; font-weight: 700;
-    letter-spacing: 3px; color: var(--accent);
-  }
-
-  #error-overlay {
-    position: absolute; inset: 0;
-    background: #040608;
-    display: none;
-    flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; z-index: 10;
-  }
-  #error-overlay.visible { display: flex; }
-  #error-overlay .err-icon { font-size: 52px; }
-  #error-overlay .err-msg {
-    font-size: 16px; color: rgba(255,255,255,.5); text-align: center;
-  }
-  #retry-btn {
-    margin-top: 8px; padding: 10px 28px;
-    background: var(--accent); border: none; border-radius: 8px;
-    color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-    font-family: 'Barlow Condensed', sans-serif; letter-spacing: 2px;
-  }
-
-  /* Canal info (esquina inferior izquierda) */
-  #ch-overlay {
-    position: absolute; bottom: 22px; left: 22px;
-    pointer-events: none;
-    animation: fadeUp .4s ease;
-  }
-  #ch-overlay-inner {
-    background: linear-gradient(135deg, rgba(0,0,0,.88), rgba(0,0,0,.55));
-    border-left: 3px solid var(--accent);
-    border-radius: 0 8px 8px 0;
-    padding: 10px 16px;
-    backdrop-filter: blur(12px);
-  }
-  #ch-overlay-top {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
-  }
-  #ch-overlay-num {
-    font-size: 10px; font-weight: 800; letter-spacing: 2.5px;
-    font-family: monospace; color: var(--accent);
-  }
-  #ch-overlay-tag {
-    font-size: 8px; font-weight: 800; letter-spacing: 1.8px;
-    color: var(--accent);
-    border: 1px solid rgba(255,255,255,.2);
-    border-radius: 3px; padding: 1px 5px;
-    background: rgba(255,255,255,.06);
-  }
-  #ch-overlay-name {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 28px; font-weight: 900; line-height: 1; color: #fff;
-  }
-  #ch-overlay-sub { font-size: 11px; color: rgba(255,255,255,.45); margin-top: 2px; }
-
-  /* Live badge */
-  .live-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-  }
-  .live-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 6px currentColor;
-    animation: pulse 1.4s ease-in-out infinite;
-  }
-  .live-text {
-    font-size: 9px; font-weight: 900; letter-spacing: 2px; font-family: monospace;
-  }
-
-  /* Guide hint */
-  #guide-hint {
-    position: absolute; top: 64px; right: 16px;
-    background: rgba(0,0,0,.6);
-    border-radius: 8px; padding: 7px 13px;
-    font-size: 11px; color: rgba(255,255,255,.35);
-    backdrop-filter: blur(8px);
-    pointer-events: none;
-    display: none;
-  }
-  #guide-hint.visible { display: block; }
-
-  /* ── ANIMATIONS ─────────────────────────────────────────── */
-  @keyframes spin    { to { transform: rotate(360deg); } }
-  @keyframes pulse   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.75)} }
-  @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+/* ── ANIMATIONS ─────────────────────────────────────────────── */
+@-webkit-keyframes spin  { to { -webkit-transform:rotate(360deg); transform:rotate(360deg); } }
+@keyframes           spin  { to { -webkit-transform:rotate(360deg); transform:rotate(360deg); } }
+@-webkit-keyframes pulse { 0%,100%{opacity:1;-webkit-transform:scale(1);transform:scale(1)} 50%{opacity:.3;-webkit-transform:scale(.7);transform:scale(.7)} }
+@keyframes           pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.7)} }
 </style>
 </head>
 <body>
 
-<!-- TOP BAR -->
-<div id="topbar">
-  <div style="display:flex;align-items:center;gap:14px">
-    <div id="logo">🇨🇱 TV CHILE</div>
-    <span class="live-badge" style="color:#55BBFF">
-      <span class="live-dot"></span>
-      <span class="live-text">EN VIVO</span>
-    </span>
-  </div>
-  <div id="topbar-right">
-    <div id="clock">00:00</div>
-    <div id="date-label">cargando...</div>
+<!-- LOGO & RELOJ -->
+<div id="tv-logo">🇨🇱 TV CHILE</div>
+<div id="clock-box">
+  <div id="clock-time">00:00</div>
+  <div id="clock-date">...</div>
+</div>
+
+<!-- VIDEO -->
+<video id="player" autoplay playsinline webkit-playsinline
+       x-webkit-airplay="allow"></video>
+
+<!-- LOADING -->
+<div id="loading">
+  <div id="spinner"></div>
+  <div id="loading-ch">CARGANDO...</div>
+</div>
+
+<!-- ERROR -->
+<div id="error-box">
+  <div style="font-size:52px">📡</div>
+  <div id="error-msg">No se pudo cargar el canal.<br>Puede estar temporalmente no disponible.</div>
+  <button id="retry-btn" onclick="retryStream()">↺ REINTENTAR</button>
+</div>
+
+<!-- BADGE "ahora viendo" -->
+<div id="now-badge">
+  <div id="now-badge-inner">
+    <div class="live-dot"></div>
+    <div>
+      <div id="badge-num">CH 02</div>
+      <div id="badge-name">24 Horas</div>
+    </div>
+    <div id="badge-live">EN VIVO</div>
   </div>
 </div>
 
-<!-- APP -->
-<div id="app">
-
-  <!-- SIDEBAR -->
-  <div id="sidebar">
-    <div id="sidebar-header">
-      <div class="label">GUÍA DE CANALES</div>
-      <div class="title">TV Chilena 🇨🇱</div>
-    </div>
-    <div id="channel-list"></div>
-    <div id="sidebar-hint">
-      ↑ ↓ &nbsp; Navegar &nbsp;•&nbsp; OK Sintonizar<br>
-      → Pantalla &nbsp;•&nbsp; ← Guía
-    </div>
-  </div>
-
-  <!-- VIDEO -->
-  <div id="video-area">
-
-    <!-- Loading -->
-    <div id="loading-overlay">
-      <div class="spinner"></div>
-      <div id="loading-text">CARGANDO...</div>
-    </div>
-
-    <!-- Error -->
-    <div id="error-overlay">
-      <div class="err-icon">📡</div>
-      <div class="err-msg">No se pudo cargar el canal.<br>El stream puede estar temporalmente no disponible.</div>
-      <button id="retry-btn" onclick="retryChannel()">↺ REINTENTAR</button>
-    </div>
-
-    <!-- Video element -->
-    <video id="player" autoplay playsinline></video>
-
-    <!-- Channel overlay info -->
-    <div id="ch-overlay">
-      <div id="ch-overlay-inner">
-        <div id="ch-overlay-top">
-          <span id="ch-overlay-num">CH 02</span>
-          <span id="ch-overlay-tag">NOTICIAS</span>
-          <span class="live-badge" id="overlay-live" style="color:#1E90FF">
-            <span class="live-dot"></span>
-            <span class="live-text">EN VIVO</span>
-          </span>
-        </div>
-        <div id="ch-overlay-name">24 Horas</div>
-        <div id="ch-overlay-sub">TVN Noticias</div>
-      </div>
-    </div>
-
-    <!-- Hint mostrar guía -->
-    <div id="guide-hint">← Mostrar guía</div>
-
-  </div>
+<!-- CANAL OVERLAY (al navegar) -->
+<div id="ch-overlay">
+  <div id="ch-strip"></div>
 </div>
 
 <script>
-// ─── CANALES ─────────────────────────────────────────────────────────────────
-// URLs m3u8 oficiales extraídas de los players de cada canal
-const CHANNELS = [
-  // ── NOTICIAS
-  {
-    id:'24h', number:'02', name:'24 Horas', sub:'TVN Noticias',
-    cat:'NOTICIAS', color:'#002060', accent:'#1E90FF',
-    urls:[
-      'https://mdstrm.com/live-stream-playlist/57d1a22064f5d85712b20dab.m3u8',
-    ]
-  },
-  {
-    id:'mega', number:'09', name:'Mega', sub:'Meganoticias En Vivo',
-    cat:'NOTICIAS', color:'#8B0000', accent:'#FF4500',
-    urls:[
-      'https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8',
-      'https://redirector.rudo.video/hls-video/mega/mega.smil/playlist.m3u8',
-    ]
-  },
-  {
-    id:'t13', number:'13', name:'T13', sub:'Canal 13 En Vivo',
-    cat:'NOTICIAS', color:'#700000', accent:'#E8001C',
-    urls:[
-      'https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8',
-      'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist_900.m3u8',
-    ]
-  },
-  {
-    id:'chv', number:'11', name:'CHV', sub:'Chilevisión En Vivo',
-    cat:'ENTRETENCION', color:'#005000', accent:'#00C853',
-    urls:[
-      'https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8',
-    ]
-  },
-  {
-    id:'cnn', number:'CNN', name:'CNN Chile', sub:'Noticias 24 Horas',
-    cat:'NOTICIAS 24H', color:'#8B0000', accent:'#FF2222',
-    urls:[
-      'https://redirector.rudo.video/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8',
-      'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8',
-    ]
-  },
-  // ── DEPORTES
-  {
-    id:'chv-dep', number:'11D', name:'CHV Dep.', sub:'Fútbol Nacional',
-    cat:'DEPORTES', color:'#003A00', accent:'#76FF03',
-    urls:[
-      'https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8',
-    ]
-  },
-  {
-    id:'13dep', number:'13D', name:'13 FutGO', sub:'Canal 13 Deportes',
-    cat:'DEPORTES', color:'#4A0000', accent:'#FF6D00',
-    urls:[
-      'https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8',
-    ]
-  },
-  {
-    id:'mega-dep', number:'09D', name:'Mega Dep.', sub:'Mega Deportes',
-    cat:'DEPORTES', color:'#5B0000', accent:'#FF9100',
-    urls:[
-      'https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8',
-    ]
-  },
-  // ── RADIO TV
-  {
-    id:'coop', number:'COOP', name:'Cooperativa', sub:'Radio Cooperativa TV',
-    cat:'RADIO TV', color:'#4A0080', accent:'#AA44FF',
-    urls:[
-      'https://unlimited1-cl-isp.dps.live/coopetv/coopetv.smil/playlist.m3u8',
-    ]
-  },
-  {
-    id:'bio', number:'BIO', name:'Bío Bío TV', sub:'Radio Biobío TV',
-    cat:'RADIO TV', color:'#003860', accent:'#00A8E8',
-    urls:[
-      'https://redirector.rudo.video/hls-video/339f69c6122f6d8f4574732c235f09b7683e31a5/bbtv/bbtv.smil/playlist.m3u8',
-    ]
-  },
-  {
-    id:'agr', number:'AGR', name:'Agricultura', sub:'Radio Agricultura TV',
-    cat:'RADIO TV', color:'#1A4D00', accent:'#5CB800',
-    urls:[
-      'https://unlimited2-cl-isp.dps.live/921tv/921tv.smil/playlist.m3u8',
-      'https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/921tv/921tv.smil/playlist.m3u8',
-    ]
-  },
+// ─── CANALES ──────────────────────────────────────────────────────────────────
+var CHANNELS = [
+  { id:'24h',     number:'02',   name:'24 Horas',    sub:'TVN Noticias',           cat:'NOTICIAS',    accent:'#1E90FF',
+    urls:['https://mdstrm.com/live-stream-playlist/57d1a22064f5d85712b20dab.m3u8'] },
+  { id:'mega',    number:'09',   name:'Mega',        sub:'Meganoticias En Vivo',   cat:'NOTICIAS',    accent:'#FF4500',
+    urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8',
+          'https://redirector.rudo.video/hls-video/mega/mega.smil/playlist.m3u8'] },
+  { id:'t13',     number:'13',   name:'T13',         sub:'Canal 13 En Vivo',       cat:'NOTICIAS',    accent:'#E8001C',
+    urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8',
+          'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist_900.m3u8'] },
+  { id:'chv',     number:'11',   name:'CHV',         sub:'Chilevisión En Vivo',    cat:'ENTRETENCIÓN',accent:'#00C853',
+    urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8'] },
+  { id:'cnn',     number:'CNN',  name:'CNN Chile',   sub:'Noticias 24 Horas',      cat:'NOTICIAS 24H',accent:'#FF2222',
+    urls:['https://redirector.rudo.video/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8',
+          'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8'] },
+  { id:'chv-d',   number:'11D',  name:'CHV Dep.',    sub:'Fútbol Nacional',        cat:'DEPORTES',    accent:'#76FF03',
+    urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8'] },
+  { id:'13dep',   number:'13D',  name:'13 FutGO',    sub:'Canal 13 Deportes',      cat:'DEPORTES',    accent:'#FF6D00',
+    urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8'] },
+  { id:'mega-d',  number:'09D',  name:'Mega Dep.',   sub:'Mega Deportes',          cat:'DEPORTES',    accent:'#FF9100',
+    urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8'] },
+  { id:'coop',    number:'COOP', name:'Cooperativa', sub:'Radio Cooperativa TV',   cat:'RADIO TV',    accent:'#AA44FF',
+    urls:['https://unlimited1-cl-isp.dps.live/coopetv/coopetv.smil/playlist.m3u8'] },
+  { id:'bio',     number:'BIO',  name:'Bío Bío',     sub:'Radio Biobío TV',        cat:'RADIO TV',    accent:'#00A8E8',
+    urls:['https://redirector.rudo.video/hls-video/339f69c6122f6d8f4574732c235f09b7683e31a5/bbtv/bbtv.smil/playlist.m3u8'] },
+  { id:'agr',     number:'AGR',  name:'Agricultura', sub:'Radio Agricultura TV',   cat:'RADIO TV',    accent:'#5CB800',
+    urls:['https://unlimited2-cl-isp.dps.live/921tv/921tv.smil/playlist.m3u8',
+          'https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/921tv/921tv.smil/playlist.m3u8'] },
 ];
 
 // ─── ESTADO ───────────────────────────────────────────────────────────────────
-let activeIdx   = 0;
-let focusedIdx  = 0;
-let showGuide   = true;
-let hls         = null;
-let urlAttempt  = 0;
+var activeIdx   = 0;
+var focusedIdx  = 0;
+var urlAttempt  = 0;
+var overlayTimer = null;
+var overlayVisible = false;
+var hls = null;
 
-const video         = document.getElementById('player');
-const loadingOv     = document.getElementById('loading-overlay');
-const errorOv       = document.getElementById('error-overlay');
-const loadingText   = document.getElementById('loading-text');
-const chList        = document.getElementById('channel-list');
-const sidebar       = document.getElementById('sidebar');
-const guideHint     = document.getElementById('guide-hint');
+var video      = document.getElementById('player');
+var loading    = document.getElementById('loading');
+var errorBox   = document.getElementById('error-box');
+var loadingCh  = document.getElementById('loading-ch');
+var chOverlay  = document.getElementById('ch-overlay');
+var chStrip    = document.getElementById('ch-strip');
+var badgeNum   = document.getElementById('badge-num');
+var badgeName  = document.getElementById('badge-name');
+var badgeLive  = document.getElementById('badge-live');
+var nowBadge   = document.getElementById('now-badge');
 
 // ─── RELOJ ────────────────────────────────────────────────────────────────────
 function updateClock() {
-  const now = new Date();
-  const hh  = String(now.getHours()).padStart(2,'0');
-  const mm  = String(now.getMinutes()).padStart(2,'0');
-  const days   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  document.getElementById('clock').textContent = `${hh}:${mm}`;
-  document.getElementById('date-label').textContent =
-    `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]}`;
+  var now = new Date();
+  var hh  = ('0'+now.getHours()).slice(-2);
+  var mm  = ('0'+now.getMinutes()).slice(-2);
+  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  document.getElementById('clock-time').textContent = hh+':'+mm;
+  document.getElementById('clock-date').textContent =
+    days[now.getDay()]+' '+now.getDate()+' '+months[now.getMonth()];
 }
 updateClock();
 setInterval(updateClock, 1000);
 
-// ─── CONSTRUIR LISTA ─────────────────────────────────────────────────────────
-function buildList() {
-  chList.innerHTML = '';
-  CHANNELS.forEach((ch, i) => {
-    const div = document.createElement('div');
-    div.className = 'ch-item' + (i===activeIdx?' active':'') + (i===focusedIdx?' focused':'');
-    div.style.setProperty('--item-accent', ch.accent);
+// ─── CONSTRUIR STRIP DE CANALES ───────────────────────────────────────────────
+function buildStrip() {
+  chStrip.innerHTML = '';
+  // Mostrar ventana de canales centrada en el enfocado
+  // Siempre generamos todos, el scroll lo hacemos con transform
+  for (var i = 0; i < CHANNELS.length; i++) {
+    var ch = CHANNELS[i];
+    var div = document.createElement('div');
+    div.className = 'ch-card' +
+      (i === focusedIdx ? ' focused' : '') +
+      (i === activeIdx  ? ' active-ch' : '');
     div.dataset.idx = i;
-    div.innerHTML = `
-      <div class="ch-icon" style="color:rgba(255,255,255,.25)">${ch.number}</div>
-      <div class="ch-info">
-        <div class="ch-badge">${i===activeIdx
-          ? `<span class="live-badge" style="color:${ch.accent}"><span class="live-dot" style="color:${ch.accent}"></span><span class="live-text">EN VIVO</span></span>`
-          : ch.cat}</div>
-        <div class="ch-name">${ch.name}</div>
-        <div class="ch-sub">${ch.sub}</div>
-      </div>
-      <div class="ch-play-arrow">▶</div>
-    `;
-    div.addEventListener('click', () => selectChannel(i));
-    div.addEventListener('mouseenter', () => setFocus(i));
-    chList.appendChild(div);
-  });
-}
-
-// ─── FOCO ─────────────────────────────────────────────────────────────────────
-function setFocus(idx) {
-  focusedIdx = idx;
-  document.querySelectorAll('.ch-item').forEach((el, i) => {
-    el.classList.toggle('focused', i === idx);
-  });
-}
-
-function scrollToFocused() {
-  const items = document.querySelectorAll('.ch-item');
-  if (items[focusedIdx]) {
-    items[focusedIdx].scrollIntoView({ block:'nearest', behavior:'smooth' });
+    div.style.borderBottom = '2px solid transparent';
+    div.innerHTML =
+      '<div class="ch-card-top">'+
+        '<span class="ch-card-num" style="color:'+ch.accent+'">CH '+ch.number+'</span>'+
+        '<span class="ch-card-cat">'+ch.cat+'</span>'+
+      '</div>'+
+      '<div class="ch-card-name">'+ch.name+'</div>'+
+      '<div class="ch-card-sub">'+ch.sub+'</div>'+
+      '<div class="ch-card-line" style="'+(i===focusedIdx?'background:'+ch.accent:'')+'"></div>';
+    (function(idx){ div.addEventListener('click', function(){ selectChannel(idx); }); })(i);
+    chStrip.appendChild(div);
   }
+  scrollStrip();
 }
 
-// ─── CARGAR CANAL ─────────────────────────────────────────────────────────────
+function scrollStrip() {
+  // Centrar el canal enfocado en pantalla
+  var cardW   = 180;
+  var viewW   = window.innerWidth;
+  var offset  = Math.round(viewW/2 - focusedIdx * cardW - cardW/2);
+  chStrip.style.webkitTransform = 'translateX('+offset+'px)';
+  chStrip.style.transform       = 'translateX('+offset+'px)';
+}
+
+// ─── ACTUALIZAR BADGE ────────────────────────────────────────────────────────
+function updateBadge(ch) {
+  badgeNum.textContent  = 'CH '+ch.number;
+  badgeName.textContent = ch.name;
+  badgeLive.style.color = ch.accent;
+  nowBadge.querySelector('.live-dot').style.background   = ch.accent;
+  nowBadge.querySelector('.live-dot').style.webkitBoxShadow = '0 0 6px '+ch.accent;
+  nowBadge.querySelector('.live-dot').style.boxShadow    = '0 0 6px '+ch.accent;
+  document.getElementById('now-badge-inner').style.borderLeftColor = ch.accent;
+  // Color del spinner y loading text
+  document.getElementById('spinner').style.borderTopColor = ch.accent;
+  loadingCh.style.color = ch.accent;
+}
+
+// ─── MOSTRAR / OCULTAR OVERLAY ────────────────────────────────────────────────
+function showOverlay() {
+  overlayVisible = true;
+  chOverlay.className = 'visible';
+  // Ocultar badge mientras el overlay está visible
+  nowBadge.style.opacity = '0';
+  resetOverlayTimer();
+}
+
+function hideOverlay() {
+  overlayVisible = false;
+  chOverlay.className = '';
+  nowBadge.style.opacity = '1';
+}
+
+function resetOverlayTimer() {
+  if (overlayTimer) clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(hideOverlay, 3500);
+}
+
+// ─── CARGAR STREAM ────────────────────────────────────────────────────────────
 function selectChannel(idx) {
-  if (idx === activeIdx && urlAttempt === 0) return;
   activeIdx  = idx;
+  focusedIdx = idx;
   urlAttempt = 0;
+  hideOverlay();
+  buildStrip();
   loadStream();
 }
 
-function retryChannel() {
+function retryStream() {
   urlAttempt = 0;
   loadStream();
 }
 
 function loadStream() {
-  const ch  = CHANNELS[activeIdx];
-  const url = ch.urls[urlAttempt] || ch.urls[0];
+  var ch  = CHANNELS[activeIdx];
+  var url = ch.urls[urlAttempt] || ch.urls[0];
 
-  // UI
-  errorOv.classList.remove('visible');
-  loadingOv.classList.remove('hidden');
-  loadingText.textContent = `SINTONIZANDO ${ch.name.toUpperCase()}...`;
-  document.documentElement.style.setProperty('--accent', ch.accent);
+  errorBox.className = '';
+  loading.className  = '';
+  loadingCh.textContent = 'SINTONIZANDO '+ch.name.toUpperCase()+'...';
+  updateBadge(ch);
 
-  // Overlay info
-  document.getElementById('ch-overlay-num').textContent  = `CH ${ch.number}`;
-  document.getElementById('ch-overlay-tag').textContent  = ch.cat;
-  document.getElementById('ch-overlay-name').textContent = ch.name;
-  document.getElementById('ch-overlay-sub').textContent  = ch.sub;
-  document.getElementById('overlay-live').style.color    = ch.accent;
-  document.getElementById('ch-overlay-num').style.color  = ch.accent;
-  document.getElementById('ch-overlay-tag').style.color  = ch.accent;
-  document.getElementById('ch-overlay-inner').style.borderLeftColor = ch.accent;
-  document.querySelector('.spinner').style.borderTopColor = ch.accent;
-
-  // Rebuild list to update active marker
-  buildList();
-  setFocus(focusedIdx);
-
-  // Destruir instancia anterior
-  if (hls) { hls.destroy(); hls = null; }
+  // Destruir HLS anterior
+  if (hls) { try { hls.destroy(); } catch(e){} hls = null; }
   video.src = '';
+  video.load();
 
-  if (Hls.isSupported()) {
-    hls = new Hls({
-      liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 6,
-      maxBufferLength: 30,
-    });
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch(()=>{});
-      loadingOv.classList.add('hidden');
-    });
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      if (data.fatal) {
-        // Intentar URL alternativa
-        const ch = CHANNELS[activeIdx];
-        if (urlAttempt + 1 < ch.urls.length) {
-          urlAttempt++;
-          loadStream();
-        } else {
-          loadingOv.classList.add('hidden');
-          errorOv.classList.add('visible');
-        }
-      }
-    });
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    // Safari / TV browsers con HLS nativo
+  function onFatalError() {
+    var ch = CHANNELS[activeIdx];
+    if (urlAttempt + 1 < ch.urls.length) {
+      urlAttempt++;
+      loadStream();
+    } else {
+      loading.className = 'hide';
+      errorBox.className = 'show';
+    }
+  }
+
+  // Samsung TV soporta HLS nativo — intentar primero sin HLS.js
+  if (video.canPlayType('application/vnd.apple.mpegurl') ||
+      video.canPlayType('application/x-mpegURL')) {
+    // HLS nativo (Safari, Samsung TV, LG TV)
     video.src = url;
-    video.addEventListener('loadedmetadata', () => {
-      video.play().catch(()=>{});
-      loadingOv.classList.add('hidden');
-    }, { once: true });
-    video.addEventListener('error', () => {
-      const ch = CHANNELS[activeIdx];
-      if (urlAttempt + 1 < ch.urls.length) {
-        urlAttempt++;
-        loadStream();
-      } else {
-        loadingOv.classList.add('hidden');
-        errorOv.classList.add('visible');
+    video.load();
+    var nativeLoaded = false;
+    video.oncanplay = function() {
+      if (nativeLoaded) return; nativeLoaded = true;
+      loading.className = 'hide';
+      video.play();
+    };
+    video.onerror = function() { onFatalError(); };
+    // Timeout fallback a HLS.js si no carga en 8s
+    setTimeout(function() {
+      if (!nativeLoaded && typeof Hls !== 'undefined' && Hls.isSupported()) {
+        video.oncanplay = null; video.onerror = null;
+        loadWithHlsJs(url, onFatalError);
       }
-    }, { once: true });
+    }, 8000);
+
+  } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+    loadWithHlsJs(url, onFatalError);
   } else {
-    loadingOv.classList.add('hidden');
-    errorOv.classList.add('visible');
+    loading.className = 'hide';
+    errorBox.className = 'show';
+    document.getElementById('error-msg').textContent =
+      'Tu navegador no soporta reproducción HLS.\nIntenta actualizar el navegador.';
   }
 }
 
-// ─── NAVEGACIÓN CON CONTROL REMOTO (teclado) ─────────────────────────────────
-document.addEventListener('keydown', e => {
-  switch(e.key) {
-    case 'ArrowDown':
-      e.preventDefault();
-      if (focusedIdx < CHANNELS.length - 1) {
-        setFocus(focusedIdx + 1);
-        scrollToFocused();
-        if (!showGuide) toggleGuide(true);
-      }
-      break;
+function loadWithHlsJs(url, onError) {
+  hls = new Hls({
+    liveSyncDurationCount: 3,
+    liveMaxLatencyDurationCount: 10,
+    maxBufferLength: 20,
+    enableWorker: false, // más compatible con TVs antiguas
+  });
+  hls.loadSource(url);
+  hls.attachMedia(video);
+  hls.on(Hls.Events.MANIFEST_PARSED, function() {
+    loading.className = 'hide';
+    video.play();
+  });
+  hls.on(Hls.Events.ERROR, function(evt, data) {
+    if (data.fatal) { onError(); }
+  });
+}
 
-    case 'ArrowUp':
-      e.preventDefault();
+// ─── NAVEGACIÓN CON CONTROL REMOTO ───────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  var key = e.key || e.keyCode;
+
+  // ARRIBA → canal anterior
+  if (key === 'ArrowUp' || key === 38) {
+    e.preventDefault();
+    if (overlayVisible) {
+      // Navegar en el overlay
       if (focusedIdx > 0) {
-        setFocus(focusedIdx - 1);
-        scrollToFocused();
-        if (!showGuide) toggleGuide(true);
+        focusedIdx--;
+        buildStrip();
+        resetOverlayTimer();
       }
-      break;
+    } else {
+      // Canal anterior directo
+      var next = activeIdx > 0 ? activeIdx - 1 : CHANNELS.length - 1;
+      selectChannel(next);
+    }
+    return;
+  }
 
-    case 'Enter':
-    case ' ':
-      e.preventDefault();
+  // ABAJO → canal siguiente
+  if (key === 'ArrowDown' || key === 40) {
+    e.preventDefault();
+    if (overlayVisible) {
+      if (focusedIdx < CHANNELS.length - 1) {
+        focusedIdx++;
+        buildStrip();
+        resetOverlayTimer();
+      }
+    } else {
+      var next = activeIdx < CHANNELS.length - 1 ? activeIdx + 1 : 0;
+      selectChannel(next);
+    }
+    return;
+  }
+
+  // IZQUIERDA → canal anterior (en overlay navega, fuera abre overlay)
+  if (key === 'ArrowLeft' || key === 37) {
+    e.preventDefault();
+    if (!overlayVisible) {
+      focusedIdx = activeIdx;
+      buildStrip();
+      showOverlay();
+    } else {
+      if (focusedIdx > 0) { focusedIdx--; buildStrip(); resetOverlayTimer(); }
+    }
+    return;
+  }
+
+  // DERECHA → en overlay navega, fuera abre overlay
+  if (key === 'ArrowRight' || key === 39) {
+    e.preventDefault();
+    if (!overlayVisible) {
+      focusedIdx = activeIdx;
+      buildStrip();
+      showOverlay();
+    } else {
+      if (focusedIdx < CHANNELS.length - 1) { focusedIdx++; buildStrip(); resetOverlayTimer(); }
+    }
+    return;
+  }
+
+  // OK / ENTER → sintonizar canal enfocado
+  if (key === 'Enter' || key === 13 || key === ' ' || key === 'Select') {
+    e.preventDefault();
+    if (overlayVisible) {
       selectChannel(focusedIdx);
-      break;
+    } else {
+      // Mostrar overlay
+      focusedIdx = activeIdx;
+      buildStrip();
+      showOverlay();
+    }
+    return;
+  }
 
-    case 'ArrowRight':
-      e.preventDefault();
-      toggleGuide(false);
-      break;
-
-    case 'ArrowLeft':
-    case 'Escape':
-    case 'GoBack':
-      e.preventDefault();
-      toggleGuide(true);
-      break;
-
-    // Números del control (si los tiene)
-    default:
-      if (e.key >= '0' && e.key <= '9') {
-        const n = parseInt(e.key);
-        if (n < CHANNELS.length) selectChannel(n);
-      }
+  // ATRÁS / ESC → ocultar overlay
+  if (key === 'Escape' || key === 27 || key === 'GoBack' || key === 'Back' || key === 10009) {
+    e.preventDefault();
+    if (overlayVisible) hideOverlay();
+    return;
   }
 });
 
-// ─── MOSTRAR / OCULTAR GUÍA ───────────────────────────────────────────────────
-function toggleGuide(show) {
-  showGuide = show;
-  sidebar.classList.toggle('hidden', !show);
-  guideHint.classList.toggle('visible', !show);
-}
-
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-buildList();
-setFocus(0);
+buildStrip();
 selectChannel(0);
 </script>
 </body>
