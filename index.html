@@ -4,572 +4,537 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
 <title>TV Chile</title>
-<!-- HLS.js versión estable compatible con navegadores TV -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
 <style>
-/* ── RESET & BASE ── compatible con Samsung Tizen antiguo ───── */
 * { -webkit-box-sizing:border-box; box-sizing:border-box; margin:0; padding:0; }
 
 html, body {
   width:100%; height:100%;
   background:#000;
   color:#fff;
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;
   overflow:hidden;
-  cursor:none;
+  /* Ocultar cursor del puntero Samsung */
+  cursor:none !important;
 }
+/* Forzar cursor oculto en TODOS los elementos */
+*, *:hover, *:focus { cursor:none !important; outline:none; }
 
-/* ── VIDEO FULL SCREEN ──────────────────────────────────────── */
+/* ── VIDEO ── */
 #player {
-  position:fixed;
-  top:0; left:0; right:0; bottom:0;
+  position:fixed; top:0; left:0;
   width:100%; height:100%;
   background:#000;
   display:block;
   z-index:1;
+  /* Fix para TVs antiguas: forzar renderizado */
+  -webkit-transform:translateZ(0); transform:translateZ(0);
+  -webkit-backface-visibility:hidden; backface-visibility:hidden;
 }
 
-/* ── LOADING ────────────────────────────────────────────────── */
+/* ── LOADING ── */
 #loading {
-  position:fixed; top:0; left:0; right:0; bottom:0;
+  position:fixed; inset:0;
   background:#040608;
   display:-webkit-box; display:-webkit-flex; display:flex;
-  -webkit-box-orient:vertical; -webkit-flex-direction:column; flex-direction:column;
-  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
-  -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center;
-  z-index:50;
-  gap:18px;
+  -webkit-flex-direction:column; flex-direction:column;
+  -webkit-align-items:center; align-items:center;
+  -webkit-justify-content:center; justify-content:center;
+  gap:18px; z-index:50;
 }
-#loading.hide { display:none; }
-
+#loading.hide { display:none !important; }
 #spinner {
   width:56px; height:56px; border-radius:50%;
-  border:3px solid rgba(255,255,255,.12);
+  border:3px solid rgba(255,255,255,.1);
   border-top-color:#1E90FF;
   -webkit-animation:spin .7s linear infinite;
   animation:spin .7s linear infinite;
 }
-#loading-ch {
-  font-size:18px; font-weight:700; letter-spacing:4px;
-  color:#1E90FF; text-transform:uppercase;
-}
+#load-txt { font-size:17px; font-weight:700; letter-spacing:4px; color:#1E90FF; }
 
-/* ── ERROR ──────────────────────────────────────────────────── */
-#error-box {
-  position:fixed; top:0; left:0; right:0; bottom:0;
-  background:#040608;
+/* ── ERROR ── */
+#err {
+  position:fixed; inset:0; background:#040608;
   display:none;
-  -webkit-box-orient:vertical; -webkit-flex-direction:column; flex-direction:column;
-  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
-  -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center;
-  z-index:50; gap:14px;
-  text-align:center;
+  -webkit-flex-direction:column; flex-direction:column;
+  -webkit-align-items:center; align-items:center;
+  -webkit-justify-content:center; justify-content:center;
+  gap:14px; z-index:50; text-align:center; padding:40px;
 }
-#error-box.show {
-  display:-webkit-box; display:-webkit-flex; display:flex;
-}
-#error-msg { font-size:15px; color:rgba(255,255,255,.5); line-height:1.6; }
-#retry-btn {
-  margin-top:10px; padding:11px 30px;
-  background:#1E90FF; border:none; border-radius:8px;
-  color:#fff; font-size:15px; font-weight:700;
+#err.show { display:-webkit-box; display:-webkit-flex; display:flex; }
+#err p { font-size:15px; color:rgba(255,255,255,.5); line-height:1.7; }
+#retry {
+  padding:12px 32px; background:#1E90FF; border:none;
+  border-radius:8px; color:#fff; font-size:16px; font-weight:700;
   letter-spacing:2px; cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
 }
 
-/* ── BADGE "AHORA VIENDO" (siempre visible, esquina inf-izq) ─ */
-#now-badge {
-  position:fixed; bottom:24px; left:24px;
-  z-index:30;
+/* ── LOGO Y RELOJ (siempre visibles) ── */
+#logo {
+  position:fixed; top:20px; left:22px; z-index:30;
+  padding:5px 16px; border-radius:7px; pointer-events:none;
+  font-size:15px; font-weight:700; letter-spacing:3px;
+  background:-webkit-linear-gradient(left,#002060,#1E90FF);
+  background:linear-gradient(to right,#002060,#1E90FF);
+}
+#clock-box {
+  position:fixed; top:16px; right:22px; z-index:30;
+  text-align:right; pointer-events:none;
+}
+#clk { font-size:22px; font-weight:700; letter-spacing:3px; font-family:monospace; }
+#dt  { font-size:10px; color:rgba(255,255,255,.35); }
+
+/* ── BADGE "AHORA VIENDO" ── */
+#badge {
+  position:fixed; bottom:26px; left:24px; z-index:30;
   -webkit-transition:opacity .4s; transition:opacity .4s;
+  pointer-events:none;
 }
-#now-badge-inner {
+#badge-inner {
   display:-webkit-box; display:-webkit-flex; display:flex;
-  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
-  gap:10px;
-  padding:8px 14px 8px 10px;
-  background:rgba(0,0,0,.72);
+  -webkit-align-items:center; align-items:center; gap:10px;
+  padding:9px 16px 9px 12px;
+  background:rgba(0,0,0,.75);
   border-left:3px solid #1E90FF;
-  border-radius:0 6px 6px 0;
-  -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+  border-radius:0 8px 8px 0;
 }
-.live-dot {
+.ldot {
   width:8px; height:8px; border-radius:50%;
-  background:#1E90FF;
+  -webkit-flex-shrink:0; flex-shrink:0;
   -webkit-animation:pulse 1.4s ease-in-out infinite;
   animation:pulse 1.4s ease-in-out infinite;
-  -webkit-box-shadow:0 0 6px #1E90FF; box-shadow:0 0 6px #1E90FF;
-  -webkit-flex-shrink:0; flex-shrink:0;
 }
-#badge-num {
-  font-size:11px; font-weight:700; letter-spacing:2px;
-  color:rgba(255,255,255,.4); font-family:monospace;
-}
-#badge-name {
-  font-size:17px; font-weight:700;
-  color:#fff; letter-spacing:.5px;
-}
-#badge-live {
-  font-size:9px; font-weight:700; letter-spacing:2px;
-  color:#1E90FF; font-family:monospace;
-}
+#b-num  { font-size:10px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.4); font-family:monospace; }
+#b-name { font-size:19px; font-weight:700; color:#fff; }
+#b-live { font-size:9px; font-weight:700; letter-spacing:2px; color:#1E90FF; font-family:monospace; }
 
-/* ── CANAL OVERLAY (aparece al navegar) ─────────────────────── */
-#ch-overlay {
-  position:fixed; bottom:0; left:0; right:0;
-  z-index:40;
-  background:-webkit-linear-gradient(top, transparent, rgba(0,0,0,.95));
-  background:linear-gradient(to bottom, transparent, rgba(0,0,0,.95));
-  padding:60px 0 0;
+/* ── CHANNEL OVERLAY (aparece al navegar) ── */
+#overlay {
+  position:fixed; bottom:0; left:0; right:0; z-index:40;
+  background:-webkit-linear-gradient(top,transparent 0%,rgba(0,0,0,.96) 100%);
+  background:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.96) 100%);
+  padding-top:80px;
   -webkit-transform:translateY(100%); transform:translateY(100%);
-  -webkit-transition:-webkit-transform .35s ease; transition:transform .35s ease;
+  -webkit-transition:-webkit-transform .3s ease; transition:transform .3s ease;
 }
-#ch-overlay.visible {
-  -webkit-transform:translateY(0); transform:translateY(0);
-}
+#overlay.on { -webkit-transform:translateY(0); transform:translateY(0); }
 
-/* Scrollable channel strip */
-#ch-strip {
+/* Strip de canales */
+#strip {
   display:-webkit-box; display:-webkit-flex; display:flex;
-  -webkit-box-align:end; -webkit-align-items:flex-end; align-items:flex-end;
-  gap:0;
-  overflow:hidden;
-  padding:0 0 28px;
+  -webkit-align-items:flex-end; align-items:flex-end;
+  padding-bottom:30px;
+  /* transición suave del scroll */
+  -webkit-transition:-webkit-transform .28s ease; transition:transform .28s ease;
+  will-change:transform;
 }
 
-.ch-card {
-  -webkit-flex-shrink:0; flex-shrink:0;
-  width:180px;
-  padding:14px 16px 16px;
-  -webkit-transition:all .22s ease; transition:all .22s ease;
-  opacity:.45;
-  -webkit-transform:scale(.88); transform:scale(.88);
+.card {
+  width:190px; -webkit-flex-shrink:0; flex-shrink:0;
+  padding:14px 18px 18px;
+  opacity:.4;
+  -webkit-transform:scale(.86); transform:scale(.86);
   -webkit-transform-origin:bottom center; transform-origin:bottom center;
-  cursor:pointer;
-  position:relative;
+  -webkit-transition:opacity .22s,transform .22s; transition:opacity .22s,transform .22s;
+  position:relative; cursor:pointer;
 }
-.ch-card.focused {
+.card.focused {
   opacity:1;
-  -webkit-transform:scale(1.05); transform:scale(1.05);
+  -webkit-transform:scale(1.06); transform:scale(1.06);
 }
-.ch-card.active-ch .ch-card-num { /* active marker */ }
+.card-num  { font-size:10px; font-weight:700; letter-spacing:2px; font-family:monospace; margin-bottom:6px; }
+.card-cat  { font-size:8px; letter-spacing:1.5px; color:rgba(255,255,255,.3); margin-left:6px; }
+.card-name { font-size:26px; font-weight:700; color:rgba(255,255,255,.6); line-height:1; }
+.card.focused .card-name { color:#fff; }
+.card-sub  { font-size:11px; color:rgba(255,255,255,.3); margin-top:4px; }
+.card-bar  { height:2px; border-radius:2px; margin-top:10px; background:transparent; }
+.card.focused .card-bar { background:#1E90FF; }
 
-.ch-card-top {
+/* ── ZONAS TÁCTILES / HOVER (para control puntero Samsung) ── */
+/* Zona izquierda → canal anterior */
+#zone-left {
+  position:fixed; left:0; top:0; bottom:0; width:120px;
+  z-index:25; cursor:none !important;
   display:-webkit-box; display:-webkit-flex; display:flex;
-  -webkit-box-align:center; -webkit-align-items:center; align-items:center;
-  gap:8px; margin-bottom:8px;
+  -webkit-align-items:center; align-items:center; -webkit-justify-content:center; justify-content:center;
 }
-.ch-card-num {
-  font-size:10px; font-family:monospace; font-weight:700;
-  letter-spacing:2px; color:rgba(255,255,255,.4);
+/* Zona derecha → canal siguiente */
+#zone-right {
+  position:fixed; right:0; top:0; bottom:0; width:120px;
+  z-index:25; cursor:none !important;
+  display:-webkit-box; display:-webkit-flex; display:flex;
+  -webkit-align-items:center; align-items:center; -webkit-justify-content:center; justify-content:center;
 }
-.ch-card-cat {
-  font-size:8px; letter-spacing:1.5px; font-weight:700;
-  color:rgba(255,255,255,.3);
+/* Zona centro → abrir overlay */
+#zone-center {
+  position:fixed; left:120px; right:120px; top:0; bottom:0;
+  z-index:25; cursor:none !important;
 }
-.ch-card-name {
-  font-size:24px; font-weight:700;
-  line-height:1; color:rgba(255,255,255,.6);
+.zone-arrow {
+  font-size:28px; color:rgba(255,255,255,0);
   -webkit-transition:color .2s; transition:color .2s;
-  letter-spacing:.5px;
+  font-weight:700; pointer-events:none;
 }
-.ch-card.focused .ch-card-name { color:#fff; }
-.ch-card-sub {
-  font-size:11px; color:rgba(255,255,255,.3);
-  margin-top:3px;
-}
-/* Accent line at bottom of focused card */
-.ch-card-line {
-  position:absolute; bottom:0; left:16px; right:16px;
-  height:2px; border-radius:2px;
-  background:transparent;
-  -webkit-transition:background .2s; transition:background .2s;
-}
-.ch-card.focused .ch-card-line { background:#1E90FF; }
+#zone-left:hover  .zone-arrow,
+#zone-right:hover .zone-arrow { color:rgba(255,255,255,.35); }
 
-/* ── LOGO TV (siempre visible esquina sup-izq) ──────────────── */
-#tv-logo {
-  position:fixed; top:20px; left:22px;
-  z-index:30;
-  background:-webkit-linear-gradient(left, #002060, #1E90FF);
-  background:linear-gradient(to right, #002060, #1E90FF);
-  border-radius:7px; padding:5px 15px;
-  font-size:15px; font-weight:700; letter-spacing:3px;
-  pointer-events:none;
-}
-
-/* Reloj esquina sup-der */
-#clock-box {
-  position:fixed; top:16px; right:22px;
-  z-index:30; text-align:right;
-  pointer-events:none;
-}
-#clock-time {
-  font-size:22px; font-weight:700; letter-spacing:3px;
-  font-family:monospace; line-height:1;
-}
-#clock-date { font-size:10px; color:rgba(255,255,255,.35); }
-
-/* ── ANIMATIONS ─────────────────────────────────────────────── */
-@-webkit-keyframes spin  { to { -webkit-transform:rotate(360deg); transform:rotate(360deg); } }
-@keyframes           spin  { to { -webkit-transform:rotate(360deg); transform:rotate(360deg); } }
-@-webkit-keyframes pulse { 0%,100%{opacity:1;-webkit-transform:scale(1);transform:scale(1)} 50%{opacity:.3;-webkit-transform:scale(.7);transform:scale(.7)} }
-@keyframes           pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.7)} }
+/* ── ANIMACIONES ── */
+@-webkit-keyframes spin  { to{-webkit-transform:rotate(360deg);transform:rotate(360deg);} }
+@keyframes           spin  { to{transform:rotate(360deg);} }
+@-webkit-keyframes pulse { 0%,100%{opacity:1;-webkit-transform:scale(1);transform:scale(1)} 50%{opacity:.25;-webkit-transform:scale(.65);transform:scale(.65)} }
+@keyframes           pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.65)} }
 </style>
 </head>
 <body>
 
-<!-- LOGO & RELOJ -->
-<div id="tv-logo">🇨🇱 TV CHILE</div>
-<div id="clock-box">
-  <div id="clock-time">00:00</div>
-  <div id="clock-date">...</div>
+<!-- Elementos UI permanentes -->
+<div id="logo">🇨🇱 TV CHILE</div>
+<div id="clock-box"><div id="clk">00:00</div><div id="dt">...</div></div>
+
+<!-- Video -->
+<video id="player" autoplay playsinline
+       webkit-playsinline x-webkit-airplay="allow"
+       preload="auto"></video>
+
+<!-- Loading / Error -->
+<div id="loading"><div id="spinner"></div><div id="load-txt">CARGANDO...</div></div>
+<div id="err">
+  <div style="font-size:50px">📡</div>
+  <p id="err-msg">No se pudo cargar el canal.<br>Puede estar temporalmente no disponible.</p>
+  <button id="retry" onclick="retry()">↺ REINTENTAR</button>
 </div>
 
-<!-- VIDEO -->
-<video id="player" autoplay playsinline webkit-playsinline
-       x-webkit-airplay="allow"></video>
-
-<!-- LOADING -->
-<div id="loading">
-  <div id="spinner"></div>
-  <div id="loading-ch">CARGANDO...</div>
-</div>
-
-<!-- ERROR -->
-<div id="error-box">
-  <div style="font-size:52px">📡</div>
-  <div id="error-msg">No se pudo cargar el canal.<br>Puede estar temporalmente no disponible.</div>
-  <button id="retry-btn" onclick="retryStream()">↺ REINTENTAR</button>
-</div>
-
-<!-- BADGE "ahora viendo" -->
-<div id="now-badge">
-  <div id="now-badge-inner">
-    <div class="live-dot"></div>
+<!-- Badge ahora viendo -->
+<div id="badge">
+  <div id="badge-inner">
+    <div class="ldot" id="ldot"></div>
     <div>
-      <div id="badge-num">CH 02</div>
-      <div id="badge-name">24 Horas</div>
+      <div id="b-num">CH 02</div>
+      <div id="b-name">24 Horas</div>
     </div>
-    <div id="badge-live">EN VIVO</div>
+    <div id="b-live">EN VIVO</div>
   </div>
 </div>
 
-<!-- CANAL OVERLAY (al navegar) -->
-<div id="ch-overlay">
-  <div id="ch-strip"></div>
+<!-- Channel overlay -->
+<div id="overlay">
+  <div id="strip"></div>
 </div>
 
+<!-- ZONAS TÁCTILES para el puntero del control Samsung -->
+<div id="zone-left"  onclick="prevChannel()"><div class="zone-arrow">‹</div></div>
+<div id="zone-right" onclick="nextChannel()"><div class="zone-arrow">›</div></div>
+<div id="zone-center" onclick="toggleOverlay()"></div>
+
 <script>
-// ─── CANALES ──────────────────────────────────────────────────────────────────
-var CHANNELS = [
-  { id:'mega',    number:'09',   name:'Mega',        sub:'Meganoticias En Vivo',   cat:'NOTICIAS',    accent:'#FF4500',
-    urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8',
-          'https://redirector.rudo.video/hls-video/mega/mega.smil/playlist.m3u8'] },
-  { id:'t13',     number:'13',   name:'T13',         sub:'Canal 13 En Vivo',       cat:'NOTICIAS',    accent:'#E8001C',
-    urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8',
-          'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist_900.m3u8'] },
-  { id:'chv',     number:'11',   name:'CHV',         sub:'Chilevisión En Vivo',    cat:'ENTRETENCIÓN',accent:'#00C853',
-    urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8'] },
-  { id:'cnn',     number:'CNN',  name:'CNN Chile',   sub:'Noticias 24 Horas',      cat:'NOTICIAS 24H',accent:'#FF2222',
-    urls:['https://redirector.rudo.video/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8',
-          'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8'] },
-  { id:'chv-d',   number:'11D',  name:'CHV Dep.',    sub:'Fútbol Nacional',        cat:'DEPORTES',    accent:'#76FF03',
-    urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8'] },
-  { id:'13dep',   number:'13D',  name:'13 FutGO',    sub:'Canal 13 Deportes',      cat:'DEPORTES',    accent:'#FF6D00',
-    urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8'] },
-  { id:'mega-d',  number:'09D',  name:'Mega Dep.',   sub:'Mega Deportes',          cat:'DEPORTES',    accent:'#FF9100',
-    urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8'] },
-  { id:'coop',    number:'COOP', name:'Cooperativa', sub:'Radio Cooperativa TV',   cat:'RADIO TV',    accent:'#AA44FF',
-    urls:['https://unlimited1-cl-isp.dps.live/coopetv/coopetv.smil/playlist.m3u8'] },
-  { id:'bio',     number:'BIO',  name:'Bío Bío',     sub:'Radio Biobío TV',        cat:'RADIO TV',    accent:'#00A8E8',
-    urls:['https://redirector.rudo.video/hls-video/339f69c6122f6d8f4574732c235f09b7683e31a5/bbtv/bbtv.smil/playlist.m3u8'] },
-  { id:'agr',     number:'AGR',  name:'Agricultura', sub:'Radio Agricultura TV',   cat:'RADIO TV',    accent:'#5CB800',
-    urls:['https://unlimited2-cl-isp.dps.live/921tv/921tv.smil/playlist.m3u8',
-          'https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/921tv/921tv.smil/playlist.m3u8'] },
+// ── CANALES ───────────────────────────────────────────────────────────────────
+var CH = [
+  {id:'24h',  num:'02',   name:'24 Horas',    sub:'TVN Noticias',         cat:'NOTICIAS',     ac:'#1E90FF',
+   urls:['https://mdstrm.com/live-stream-playlist/57d1a22064f5d85712b20dab.m3u8']},
+  {id:'mega', num:'09',   name:'Mega',         sub:'Meganoticias En Vivo', cat:'NOTICIAS',     ac:'#FF4500',
+   urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8',
+         'https://redirector.rudo.video/hls-video/mega/mega.smil/playlist.m3u8']},
+  {id:'t13',  num:'13',   name:'T13',          sub:'Canal 13 En Vivo',     cat:'NOTICIAS',     ac:'#E8001C',
+   urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8',
+         'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist_900.m3u8']},
+  {id:'chv',  num:'11',   name:'CHV',          sub:'Chilevisión En Vivo',  cat:'ENTRETENCIÓN', ac:'#00C853',
+   urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8']},
+  {id:'cnn',  num:'CNN',  name:'CNN Chile',    sub:'Noticias 24 Horas',    cat:'NOTICIAS 24H', ac:'#FF2222',
+   urls:['https://redirector.rudo.video/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8',
+         'https://jireh-4-hls-video-cl-isp.dps.live/hls-video/lvcl5/cnn/cnn.smil/playlist.m3u8']},
+  {id:'chvd', num:'11D',  name:'CHV Dep.',     sub:'Fútbol Nacional',      cat:'DEPORTES',     ac:'#76FF03',
+   urls:['https://mdstrm.com/live-stream-playlist/6491ced935a5833c47dd7f41.m3u8']},
+  {id:'13d',  num:'13D',  name:'13 FutGO',     sub:'Canal 13 Deportes',    cat:'DEPORTES',     ac:'#FF6D00',
+   urls:['https://redirector.rudo.video/hls-video/10b92cafdf3646cbc1e727f3dc76863621a327fd/t13/t13.smil/playlist.m3u8']},
+  {id:'megad',num:'09D',  name:'Mega Dep.',    sub:'Mega Deportes',        cat:'DEPORTES',     ac:'#FF9100',
+   urls:['https://pantera1-100gb-cl-movistar.dps.live/mega/mega.smil/playlist.m3u8']},
+  {id:'coop', num:'COOP', name:'Cooperativa',  sub:'Radio Cooperativa TV', cat:'RADIO TV',     ac:'#AA44FF',
+   urls:['https://unlimited1-cl-isp.dps.live/coopetv/coopetv.smil/playlist.m3u8']},
+  {id:'bio',  num:'BIO',  name:'Bío Bío',      sub:'Radio Biobío TV',      cat:'RADIO TV',     ac:'#00A8E8',
+   urls:['https://redirector.rudo.video/hls-video/339f69c6122f6d8f4574732c235f09b7683e31a5/bbtv/bbtv.smil/playlist.m3u8']},
+  {id:'agr',  num:'AGR',  name:'Agricultura',  sub:'Radio Agricultura TV', cat:'RADIO TV',     ac:'#5CB800',
+   urls:['https://unlimited2-cl-isp.dps.live/921tv/921tv.smil/playlist.m3u8',
+         'https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/921tv/921tv.smil/playlist.m3u8']},
 ];
 
-// ─── ESTADO ───────────────────────────────────────────────────────────────────
-var activeIdx   = 0;
-var focusedIdx  = 0;
-var urlAttempt  = 0;
-var overlayTimer = null;
-var overlayVisible = false;
-var hls = null;
+// ── ESTADO ────────────────────────────────────────────────────────────────────
+var activeIdx  = 0;
+var focusedIdx = 0;
+var urlAttempt = 0;
+var ovTimer    = null;
+var ovVisible  = false;
+var hls        = null;
 
-var video      = document.getElementById('player');
-var loading    = document.getElementById('loading');
-var errorBox   = document.getElementById('error-box');
-var loadingCh  = document.getElementById('loading-ch');
-var chOverlay  = document.getElementById('ch-overlay');
-var chStrip    = document.getElementById('ch-strip');
-var badgeNum   = document.getElementById('badge-num');
-var badgeName  = document.getElementById('badge-name');
-var badgeLive  = document.getElementById('badge-live');
-var nowBadge   = document.getElementById('now-badge');
+var video   = document.getElementById('player');
+var loading = document.getElementById('loading');
+var errBox  = document.getElementById('err');
+var loadTxt = document.getElementById('load-txt');
+var strip   = document.getElementById('strip');
+var overlay = document.getElementById('overlay');
+var badge   = document.getElementById('badge');
 
-// ─── RELOJ ────────────────────────────────────────────────────────────────────
-function updateClock() {
-  var now = new Date();
-  var hh  = ('0'+now.getHours()).slice(-2);
-  var mm  = ('0'+now.getMinutes()).slice(-2);
-  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  var months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  document.getElementById('clock-time').textContent = hh+':'+mm;
-  document.getElementById('clock-date').textContent =
-    days[now.getDay()]+' '+now.getDate()+' '+months[now.getMonth()];
+// ── RELOJ ─────────────────────────────────────────────────────────────────────
+function tickClock() {
+  var n = new Date();
+  var h = ('0'+n.getHours()).slice(-2), m = ('0'+n.getMinutes()).slice(-2);
+  var days=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var mos =['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  document.getElementById('clk').textContent = h+':'+m;
+  document.getElementById('dt').textContent  = days[n.getDay()]+' '+n.getDate()+' '+mos[n.getMonth()];
 }
-updateClock();
-setInterval(updateClock, 1000);
+tickClock(); setInterval(tickClock,1000);
 
-// ─── CONSTRUIR STRIP DE CANALES ───────────────────────────────────────────────
+// ── BADGE ─────────────────────────────────────────────────────────────────────
+function updateBadge(c) {
+  document.getElementById('b-num').textContent  = 'CH '+c.num;
+  document.getElementById('b-name').textContent = c.name;
+  var dot = document.getElementById('ldot');
+  dot.style.background   = c.ac;
+  dot.style.webkitBoxShadow = '0 0 6px '+c.ac;
+  dot.style.boxShadow    = '0 0 6px '+c.ac;
+  document.getElementById('b-live').style.color = c.ac;
+  document.getElementById('badge-inner').style.borderLeftColor = c.ac;
+  document.getElementById('spinner').style.borderTopColor = c.ac;
+  loadTxt.style.color = c.ac;
+}
+
+// ── STRIP ─────────────────────────────────────────────────────────────────────
 function buildStrip() {
-  chStrip.innerHTML = '';
-  // Mostrar ventana de canales centrada en el enfocado
-  // Siempre generamos todos, el scroll lo hacemos con transform
-  for (var i = 0; i < CHANNELS.length; i++) {
-    var ch = CHANNELS[i];
-    var div = document.createElement('div');
-    div.className = 'ch-card' +
-      (i === focusedIdx ? ' focused' : '') +
-      (i === activeIdx  ? ' active-ch' : '');
-    div.dataset.idx = i;
-    div.style.borderBottom = '2px solid transparent';
-    div.innerHTML =
-      '<div class="ch-card-top">'+
-        '<span class="ch-card-num" style="color:'+ch.accent+'">CH '+ch.number+'</span>'+
-        '<span class="ch-card-cat">'+ch.cat+'</span>'+
+  strip.innerHTML = '';
+  for (var i = 0; i < CH.length; i++) {
+    var c = CH[i];
+    var d = document.createElement('div');
+    d.className = 'card'+(i===focusedIdx?' focused':'');
+    d.dataset.i = i;
+    d.innerHTML =
+      '<div style="display:flex;align-items:center">'+
+        '<span class="card-num" style="color:'+c.ac+'">CH '+c.num+'</span>'+
+        '<span class="card-cat">'+c.cat+'</span>'+
       '</div>'+
-      '<div class="ch-card-name">'+ch.name+'</div>'+
-      '<div class="ch-card-sub">'+ch.sub+'</div>'+
-      '<div class="ch-card-line" style="'+(i===focusedIdx?'background:'+ch.accent:'')+'"></div>';
-    (function(idx){ div.addEventListener('click', function(){ selectChannel(idx); }); })(i);
-    chStrip.appendChild(div);
+      '<div class="card-name">'+c.name+'</div>'+
+      '<div class="card-sub">'+c.sub+'</div>'+
+      '<div class="card-bar" style="'+(i===focusedIdx?'background:'+c.ac:'')+'"></div>';
+    (function(idx){ d.addEventListener('click', function(e){ e.stopPropagation(); selectCh(idx); }); })(i);
+    strip.appendChild(d);
   }
   scrollStrip();
 }
 
 function scrollStrip() {
-  // Centrar el canal enfocado en pantalla
-  var cardW   = 180;
-  var viewW   = window.innerWidth;
-  var offset  = Math.round(viewW/2 - focusedIdx * cardW - cardW/2);
-  chStrip.style.webkitTransform = 'translateX('+offset+'px)';
-  chStrip.style.transform       = 'translateX('+offset+'px)';
+  var W     = window.innerWidth || document.documentElement.clientWidth || 1280;
+  var cardW = 190;
+  var off   = Math.round(W/2 - focusedIdx*cardW - cardW/2);
+  strip.style.webkitTransform = 'translateX('+off+'px)';
+  strip.style.transform       = 'translateX('+off+'px)';
 }
 
-// ─── ACTUALIZAR BADGE ────────────────────────────────────────────────────────
-function updateBadge(ch) {
-  badgeNum.textContent  = 'CH '+ch.number;
-  badgeName.textContent = ch.name;
-  badgeLive.style.color = ch.accent;
-  nowBadge.querySelector('.live-dot').style.background   = ch.accent;
-  nowBadge.querySelector('.live-dot').style.webkitBoxShadow = '0 0 6px '+ch.accent;
-  nowBadge.querySelector('.live-dot').style.boxShadow    = '0 0 6px '+ch.accent;
-  document.getElementById('now-badge-inner').style.borderLeftColor = ch.accent;
-  // Color del spinner y loading text
-  document.getElementById('spinner').style.borderTopColor = ch.accent;
-  loadingCh.style.color = ch.accent;
+// ── OVERLAY ───────────────────────────────────────────────────────────────────
+function showOv() {
+  ovVisible = true;
+  overlay.className = 'on';
+  badge.style.opacity = '0';
+  resetOvTimer();
+}
+function hideOv() {
+  ovVisible = false;
+  overlay.className = '';
+  badge.style.opacity = '1';
+  if (ovTimer) clearTimeout(ovTimer);
+}
+function resetOvTimer() {
+  if (ovTimer) clearTimeout(ovTimer);
+  ovTimer = setTimeout(hideOv, 4000);
+}
+function toggleOverlay() {
+  if (ovVisible) { selectCh(focusedIdx); } else { focusedIdx=activeIdx; buildStrip(); showOv(); }
 }
 
-// ─── MOSTRAR / OCULTAR OVERLAY ────────────────────────────────────────────────
-function showOverlay() {
-  overlayVisible = true;
-  chOverlay.className = 'visible';
-  // Ocultar badge mientras el overlay está visible
-  nowBadge.style.opacity = '0';
-  resetOverlayTimer();
+// ── STREAM ────────────────────────────────────────────────────────────────────
+function selectCh(idx) {
+  activeIdx = idx; focusedIdx = idx; urlAttempt = 0;
+  hideOv(); buildStrip(); loadStream();
 }
-
-function hideOverlay() {
-  overlayVisible = false;
-  chOverlay.className = '';
-  nowBadge.style.opacity = '1';
+function nextChannel() {
+  selectCh(activeIdx < CH.length-1 ? activeIdx+1 : 0);
 }
-
-function resetOverlayTimer() {
-  if (overlayTimer) clearTimeout(overlayTimer);
-  overlayTimer = setTimeout(hideOverlay, 3500);
+function prevChannel() {
+  selectCh(activeIdx > 0 ? activeIdx-1 : CH.length-1);
 }
-
-// ─── CARGAR STREAM ────────────────────────────────────────────────────────────
-function selectChannel(idx) {
-  activeIdx  = idx;
-  focusedIdx = idx;
-  urlAttempt = 0;
-  hideOverlay();
-  buildStrip();
-  loadStream();
-}
-
-function retryStream() {
-  urlAttempt = 0;
-  loadStream();
-}
+function retry() { urlAttempt=0; loadStream(); }
 
 function loadStream() {
-  var ch  = CHANNELS[activeIdx];
-  var url = ch.urls[urlAttempt] || ch.urls[0];
+  var c   = CH[activeIdx];
+  var url = c.urls[urlAttempt] || c.urls[0];
 
-  errorBox.className = '';
-  loading.className  = '';
-  loadingCh.textContent = 'SINTONIZANDO '+ch.name.toUpperCase()+'...';
-  updateBadge(ch);
+  errBox.className  = '';
+  loading.className = '';
+  loadTxt.textContent = 'SINTONIZANDO '+c.name.toUpperCase()+'...';
+  updateBadge(c);
 
-  // Destruir HLS anterior
-  if (hls) { try { hls.destroy(); } catch(e){} hls = null; }
-  video.src = '';
+  if (hls) { try{hls.destroy();}catch(e){} hls=null; }
+  video.pause();
+  video.removeAttribute('src');
   video.load();
 
-  function onFatalError() {
-    var ch = CHANNELS[activeIdx];
-    if (urlAttempt + 1 < ch.urls.length) {
-      urlAttempt++;
-      loadStream();
-    } else {
-      loading.className = 'hide';
-      errorBox.className = 'show';
-    }
+  function onFatal() {
+    var c2 = CH[activeIdx];
+    if (urlAttempt+1 < c2.urls.length) { urlAttempt++; loadStream(); }
+    else { loading.className='hide'; errBox.className='show'; }
   }
 
-  // Samsung TV soporta HLS nativo — intentar primero sin HLS.js
-  if (video.canPlayType('application/vnd.apple.mpegurl') ||
-      video.canPlayType('application/x-mpegURL')) {
-    // HLS nativo (Safari, Samsung TV, LG TV)
-    video.src = url;
-    video.load();
-    var nativeLoaded = false;
-    video.oncanplay = function() {
-      if (nativeLoaded) return; nativeLoaded = true;
-      loading.className = 'hide';
-      video.play();
-    };
-    video.onerror = function() { onFatalError(); };
-    // Timeout fallback a HLS.js si no carga en 8s
-    setTimeout(function() {
-      if (!nativeLoaded && typeof Hls !== 'undefined' && Hls.isSupported()) {
-        video.oncanplay = null; video.onerror = null;
-        loadWithHlsJs(url, onFatalError);
-      }
-    }, 8000);
+  // ── ESTRATEGIA DE CARGA ──────────────────────────────────────────────────
+  // 1) Si el navegador soporta HLS nativo (Samsung TV, Safari): úsalo directo.
+  //    Si falla o no carga en 10s → caer en HLS.js
+  // 2) Si no hay HLS nativo pero sí HLS.js: usarlo
+  // 3) Si nada funciona: mostrar error
 
+  var nativeSupport = (
+    video.canPlayType('application/vnd.apple.mpegurl') !== '' ||
+    video.canPlayType('application/x-mpegURL') !== '' ||
+    video.canPlayType('audio/mpegurl') !== ''
+  );
+
+  if (nativeSupport) {
+    tryNative(url, onFatal);
   } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-    loadWithHlsJs(url, onFatalError);
+    tryHlsJs(url, onFatal);
   } else {
     loading.className = 'hide';
-    errorBox.className = 'show';
-    document.getElementById('error-msg').textContent =
-      'Tu navegador no soporta reproducción HLS.\nIntenta actualizar el navegador.';
+    errBox.className  = 'show';
+    document.getElementById('err-msg').textContent =
+      'Tu navegador no soporta streaming HLS.\nPor favor actualiza el navegador de la TV.';
   }
 }
 
-function loadWithHlsJs(url, onError) {
+function tryNative(url, onFatal) {
+  var done = false;
+  var tmt  = null;
+
+  function cleanup() {
+    clearTimeout(tmt);
+    video.oncanplay  = null;
+    video.onplaying  = null;
+    video.onerror    = null;
+    video.onstalled  = null;
+  }
+
+  video.oncanplay = video.onplaying = function() {
+    if (done) return; done = true;
+    cleanup();
+    loading.className = 'hide';
+    video.play().catch(function(){});
+  };
+
+  video.onerror = function() {
+    if (done) return; done = true;
+    cleanup();
+    // Intentar con HLS.js antes de declarar error
+    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+      tryHlsJs(url, onFatal);
+    } else { onFatal(); }
+  };
+
+  // Timeout: si nativo no arranca en 10s, intentar HLS.js
+  tmt = setTimeout(function() {
+    if (done) return; done = true;
+    cleanup();
+    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+      tryHlsJs(url, onFatal);
+    } else { onFatal(); }
+  }, 10000);
+
+  video.src = url;
+  video.load();
+}
+
+function tryHlsJs(url, onFatal) {
   hls = new Hls({
     liveSyncDurationCount: 3,
-    liveMaxLatencyDurationCount: 10,
+    liveMaxLatencyDurationCount: 12,
     maxBufferLength: 20,
-    enableWorker: false, // más compatible con TVs antiguas
+    enableWorker: false,        // Más compatible con TVs antiguas
+    lowLatencyMode: false,
+    progressive: false,
   });
   hls.loadSource(url);
   hls.attachMedia(video);
   hls.on(Hls.Events.MANIFEST_PARSED, function() {
     loading.className = 'hide';
-    video.play();
+    video.play().catch(function(){});
   });
-  hls.on(Hls.Events.ERROR, function(evt, data) {
-    if (data.fatal) { onError(); }
+  hls.on(Hls.Events.ERROR, function(e, d) {
+    if (d.fatal) { onFatal(); }
   });
 }
 
-// ─── NAVEGACIÓN CON CONTROL REMOTO ───────────────────────────────────────────
-document.addEventListener('keydown', function(e) {
-  var key = e.key || e.keyCode;
+// ── TECLADO / CONTROL REMOTO ─────────────────────────────────────────────────
+// Samsung Tizen key codes:
+//   37=Left  38=Up  39=Right  40=Down  13=Enter
+//   10009=Return/Back   10182=Exit
+//   412=Rewind  417=FastForward  415=Play  19=Pause
 
-  // ARRIBA → canal anterior
-  if (key === 'ArrowUp' || key === 38) {
-    e.preventDefault();
-    if (overlayVisible) {
-      // Navegar en el overlay
-      if (focusedIdx > 0) {
-        focusedIdx--;
-        buildStrip();
-        resetOverlayTimer();
-      }
-    } else {
-      // Canal anterior directo
-      var next = activeIdx > 0 ? activeIdx - 1 : CHANNELS.length - 1;
-      selectChannel(next);
+function handleKey(e) {
+  var k = e.keyCode || e.which || 0;
+  var key = e.key || '';
+
+  // Detectar teclas relevantes
+  var isUp    = (k===38 || key==='ArrowUp');
+  var isDown  = (k===40 || key==='ArrowDown');
+  var isLeft  = (k===37 || key==='ArrowLeft');
+  var isRight = (k===39 || key==='ArrowRight');
+  var isOk    = (k===13 || key==='Enter' || key==='Select' || k===32);
+  var isBack  = (k===27 || k===10009 || k===10182 || key==='Escape' || key==='GoBack');
+
+  if (!isUp && !isDown && !isLeft && !isRight && !isOk && !isBack) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (isBack) {
+    if (ovVisible) hideOv();
+    return;
+  }
+
+  if (isOk) {
+    if (ovVisible) { selectCh(focusedIdx); }
+    else { focusedIdx=activeIdx; buildStrip(); showOv(); }
+    return;
+  }
+
+  // Con overlay visible: navegar por canales
+  if (ovVisible) {
+    if (isLeft || isUp) {
+      if (focusedIdx > 0) { focusedIdx--; buildStrip(); resetOvTimer(); }
+    } else if (isRight || isDown) {
+      if (focusedIdx < CH.length-1) { focusedIdx++; buildStrip(); resetOvTimer(); }
     }
     return;
   }
 
-  // ABAJO → canal siguiente
-  if (key === 'ArrowDown' || key === 40) {
-    e.preventDefault();
-    if (overlayVisible) {
-      if (focusedIdx < CHANNELS.length - 1) {
-        focusedIdx++;
-        buildStrip();
-        resetOverlayTimer();
-      }
-    } else {
-      var next = activeIdx < CHANNELS.length - 1 ? activeIdx + 1 : 0;
-      selectChannel(next);
-    }
-    return;
-  }
+  // Sin overlay: cambiar canal directamente
+  if (isDown || isRight) { nextChannel(); }
+  if (isUp   || isLeft)  { prevChannel(); }
+}
 
-  // IZQUIERDA → canal anterior (en overlay navega, fuera abre overlay)
-  if (key === 'ArrowLeft' || key === 37) {
-    e.preventDefault();
-    if (!overlayVisible) {
-      focusedIdx = activeIdx;
-      buildStrip();
-      showOverlay();
-    } else {
-      if (focusedIdx > 0) { focusedIdx--; buildStrip(); resetOverlayTimer(); }
-    }
-    return;
-  }
+// Escuchar en fase de captura (capture:true) para interceptar antes que el video
+window.addEventListener('keydown',  handleKey, true);
+document.addEventListener('keydown', handleKey, true);
 
-  // DERECHA → en overlay navega, fuera abre overlay
-  if (key === 'ArrowRight' || key === 39) {
-    e.preventDefault();
-    if (!overlayVisible) {
-      focusedIdx = activeIdx;
-      buildStrip();
-      showOverlay();
-    } else {
-      if (focusedIdx < CHANNELS.length - 1) { focusedIdx++; buildStrip(); resetOverlayTimer(); }
-    }
-    return;
-  }
+// Algunos navegadores TV usan keypress
+window.addEventListener('keypress',  handleKey, true);
+document.addEventListener('keypress', handleKey, true);
 
-  // OK / ENTER → sintonizar canal enfocado
-  if (key === 'Enter' || key === 13 || key === ' ' || key === 'Select') {
-    e.preventDefault();
-    if (overlayVisible) {
-      selectChannel(focusedIdx);
-    } else {
-      // Mostrar overlay
-      focusedIdx = activeIdx;
-      buildStrip();
-      showOverlay();
-    }
-    return;
-  }
-
-  // ATRÁS / ESC → ocultar overlay
-  if (key === 'Escape' || key === 27 || key === 'GoBack' || key === 'Back' || key === 10009) {
-    e.preventDefault();
-    if (overlayVisible) hideOverlay();
-    return;
-  }
-});
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────────────────────────
 buildStrip();
-selectChannel(0);
+selectCh(0);
+
+// Asegurar foco en body para recibir teclas
+document.body.setAttribute('tabindex','0');
+document.body.focus();
+
+// Re-enfocar si se pierde el foco
+document.addEventListener('click', function(){ document.body.focus(); });
+video.addEventListener('click', function(e){ e.stopPropagation(); document.body.focus(); toggleOverlay(); });
 </script>
 </body>
 </html>
